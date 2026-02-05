@@ -1,0 +1,13 @@
+name: HardwareAudit
+version: '1.0'
+main: io.github.Earth1283.HardwareAudit
+api-version: '1.13'
+load: STARTUP
+authors: [ Earth1283 ]
+description: Audit your summer host's claims against reality
+
+commands:
+  audit:
+    description: Run hardware audit performance tests
+    usage: /audit <cpu|steal|specs|all> [duration]
+    permission: hardwareaudit.use
