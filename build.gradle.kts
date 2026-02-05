@@ -107,7 +107,7 @@ tasks.register("obfuscateJars") {
                 // Replace original with temp
                 obfsJar.delete()
                 // Use java.nio.file.Files.move for better reliability/exception reporting
-                java.nio.file.Files.move(tempJar.toPath(), obfsJar.toPath())
+                Files.move(tempJar.toPath(), obfsJar.toPath())
                 
                 println("Created: ${obfsJar.name} (Injected random data)")
             } catch (e: Exception) {
