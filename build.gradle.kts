@@ -9,6 +9,7 @@ import java.util.zip.ZipOutputStream
 import java.util.zip.ZipEntry
 import java.util.Random
 import java.util.UUID
+import java.nio.file.Files
 
 group = "io.github.Earth1283"
 version = "1.0"
