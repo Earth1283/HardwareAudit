@@ -51,6 +51,5 @@ jobs:
         tag_name: nightly
         name: Nightly Build
         body: "Automated daily build with latest obfuscation variants."
-        prerelease: true
         target_commitish: main
         make_latest: false
