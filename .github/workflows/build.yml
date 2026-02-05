@@ -36,8 +36,21 @@ jobs:
         name: HardwareAudit-Jars
         path: build/libs/HardwareAudit-*-*.jar
 
-    - name: Create Release
+    - name: Create Release (Tag)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
         files: build/libs/HardwareAudit-*-*.jar
+        make_latest: true
+
+    - name: Update Nightly Release
+      if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: build/libs/HardwareAudit-*-*.jar
+        tag_name: nightly
+        name: Nightly Build
+        body: "Automated daily build with latest obfuscation variants."
+        prerelease: true
+        target_commitish: main
+        make_latest: false
