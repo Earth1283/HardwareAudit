@@ -54,4 +54,32 @@ object Judgement {
         if (stdDev < 10.0) return "<yellow>A bit jittery. Have you tried turning it off and on again?</yellow>"
         return "<red>Parkinson's Simulator. The lag spikes are real.</red>"
     }
+
+    fun getJvmRemark(args: List<String>): String? {
+        var xmx: String? = null
+        var xms: String? = null
+        var parallel = false
+        
+        for (arg in args) {
+            if (arg.startsWith("-Xmx")) xmx = arg
+            if (arg.startsWith("-Xms")) xms = arg
+            if (arg.contains("UseParallelGC")) parallel = true
+        }
+        
+        if (parallel) return "<red><b>ParallelGC Detected:</b> Do you enjoy lag spikes? Use G1GC or ZGC.</red>"
+        if (xmx != null && xms != null && xmx != xms) return "<red><b>Aikar is crying:</b> Xmx != Xms. This causes heap resize lag. Fix your flags.</red>"
+        if (xmx == null) return "<red><b>No Flags Detected:</b> Running naked? You're brave.</red>"
+        
+        return "<green>JVM Flags look decent. (Or you hid them well).</green>"
+    }
+    fun getNetworkRemark(mbps: Double): String {
+        if (mbps > 500) return "<green>Fiber optic? Blazing fast.</green>"
+        if (mbps > 100) return "<green>Acceptable datacenter speeds.</green>"
+        if (mbps > 25) return "<yellow>Home internet detected. Hosting from your bedroom?</yellow>"
+        return "<red><b>Dial-up Detected.</b> Are you using a carrier pigeon?</red>"
+    }
+
+    fun stripTags(message: String): String {
+        return mm.stripTags(message)
+    }
 }

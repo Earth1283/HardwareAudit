@@ -7,17 +7,19 @@ import org.bukkit.command.CommandSender
 import kotlin.math.pow
 import kotlin.math.sqrt
 
+import io.github.Earth1283.utils.BenchmarkResult
+import java.util.concurrent.CompletableFuture
+
 class MsptBenchmark(private val plugin: HardwareAudit) {
 
     private val mm = MiniMessage.miniMessage()
 
-    fun monitorMspt(sender: CommandSender, durationSeconds: Int) {
+    fun monitorMspt(durationSeconds: Int): CompletableFuture<BenchmarkResult> {
+        val future = CompletableFuture<BenchmarkResult>()
         val samples = ArrayList<Double>()
         var ticks = 0
         val expectedTicks = durationSeconds * 20
         var lastTickTime = System.nanoTime()
-
-        sender.sendMessage(mm.deserialize("<yellow>Monitoring MSPT for <white>$durationSeconds</white> seconds...</yellow>"))
 
         var taskId = -1
 
@@ -34,34 +36,36 @@ class MsptBenchmark(private val plugin: HardwareAudit) {
 
             if (ticks > expectedTicks + 1) { // +1 for the warm up tick
                 Bukkit.getScheduler().cancelTask(taskId)
-                report(sender, samples)
+                
+                // Calculate Stats
+                if (samples.isEmpty()) {
+                   future.completeExceptionally(RuntimeException("No samples collected"))
+                } else {
+                    val min = samples.minOrNull() ?: 0.0
+                    val max = samples.maxOrNull() ?: 0.0
+                    val avg = samples.average()
+                    val variance = samples.sumOf { (it - avg).pow(2) } / samples.size
+                    val stdDev = sqrt(variance)
+                    
+                    val minStr = "%.2f".format(min)
+                    val maxStr = "%.2f".format(max)
+                    val avgStr = "%.2f".format(avg)
+                    val stdDevStr = "%.2f".format(stdDev)
+                    val remark = io.github.Earth1283.utils.Judgement.getMsptRemark(stdDev)
+                    
+                    val stdDevColor = if (stdDev < 5.0) "<green>" else if (stdDev < 15.0) "<yellow>" else "<red>"
+
+                    val details = mm.deserialize("""
+                        <gradient:#00ff00:#00aaaa><bold>MSPT Analysis Finished!</bold></gradient>
+                        <gray>Avg:</gray> <yellow>${avgStr}ms</yellow> <gray>Max:</gray> <red>${maxStr}ms</red> <gray>StdDev:</gray> $stdDevColor${stdDevStr}ms</${if(stdDev<15.0) "yellow" else "red"}>
+                        <hover:show_text:'<gray>Standard Deviation measures tick stability. High values = Lag Spikes.</gray>'>[?]</hover>
+                    """.trimIndent())
+                    
+                    future.complete(BenchmarkResult("MSPT", "${avgStr}ms (SD: ${stdDevStr})", remark, details))
+                }
             }
         }, 0L, 1L)
-    }
-
-    private fun report(sender: CommandSender, samples: List<Double>) {
-        if (samples.isEmpty()) {
-            sender.sendMessage(mm.deserialize("<red>No samples collected!</red>"))
-            return
-        }
-
-        val min = samples.minOrNull() ?: 0.0
-        val max = samples.maxOrNull() ?: 0.0
-        val avg = samples.average()
         
-        // Calculate Standard Deviation
-        // SD = sqrt( sum((x - mean)^2) / N )
-        val variance = samples.sumOf { (it - avg).pow(2) } / samples.size
-        val stdDev = sqrt(variance)
-
-        sender.sendMessage(mm.deserialize("<green>MSPT Analysis Finished!</green>"))
-        sender.sendMessage(mm.deserialize("<gray>Samples:</gray> <white>${samples.size}</white>"))
-        sender.sendMessage(mm.deserialize("<gray>Min:</gray> <green>${"%.2f".format(min)}ms</green>"))
-        sender.sendMessage(mm.deserialize("<gray>Max:</gray> <red>${"%.2f".format(max)}ms</red>"))
-        sender.sendMessage(mm.deserialize("<gray>Avg:</gray> <yellow>${"%.2f".format(avg)}ms</yellow>"))
-        
-        val stdDevColor = if (stdDev < 5.0) "<green>" else if (stdDev < 15.0) "<yellow>" else "<red>"
-        sender.sendMessage(mm.deserialize("<gray>Std Dev:</gray> $stdDevColor${"%.2f".format(stdDev)}ms</reset>"))
-        sender.sendMessage(mm.deserialize(io.github.Earth1283.utils.Judgement.getMsptRemark(stdDev)))
+        return future
     }
 }

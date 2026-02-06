@@ -1,6 +1,8 @@
 package io.github.Earth1283.benchmarks
 
 import io.github.Earth1283.HardwareAudit
+import io.github.Earth1283.utils.BenchmarkResult
+import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import java.util.concurrent.CompletableFuture
 import kotlin.random.Random
@@ -9,9 +11,10 @@ import kotlin.math.cos
 import kotlin.math.sqrt
 
 class CpuBenchmark(private val plugin: HardwareAudit) {
+    private val mm = MiniMessage.miniMessage()
 
-    fun runCpuTest(durationSeconds: Int): CompletableFuture<Double> {
-        val future = CompletableFuture<Double>()
+    fun runCpuTest(durationSeconds: Int): CompletableFuture<BenchmarkResult> {
+        val future = CompletableFuture<BenchmarkResult>()
         
         Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
             val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
@@ -33,16 +36,21 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
                         }
                     }
                 }
-                
-                // Keep the CPU busy counting (optional, but ensures we touched the memory)
-                // for (i in 2..size) { if (flags.get(i)) count++ }
-                
                 passes++
             }
             
             // Passes per second
-            val score = passes / durationSeconds.toDouble()
-            future.complete(score)
+            val scoreVal = passes / durationSeconds.toDouble()
+            val scoreStr = "%.2f".format(scoreVal)
+            val remark = io.github.Earth1283.utils.Judgement.getCpuRemark(scoreVal)
+            
+            val details = mm.deserialize("""
+                <gradient:#00ff00:#00aaaa><bold>CPU Benchmark Finished!</bold></gradient>
+                <gray>Score:</gray> <#ffd700>${scoreStr} ops/sec</#ffd700>
+                <hover:show_text:'<gray>Higher is better. Based on prime number calculation speed.</gray>'>[?]</hover>
+            """.trimIndent())
+
+            future.complete(BenchmarkResult("CPU", "$scoreStr ops/s", remark, details))
         })
         
         return future

@@ -23,8 +23,32 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21-R0.1-SNAPSHOT")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    implementation(kotlin("stdlib"))
     implementation("com.github.oshi:oshi-core:6.6.5")
+}
+
+tasks.shadowJar {
+    archiveClassifier.set("all")
+    // Exclude unnecessary JNA native libraries to reduce JAR size
+    val excludedPlatforms = listOf(
+        "aix-ppc", "aix-ppc64", "freebsd-aarch64", "freebsd-x86", "freebsd-x86-64",
+        "linux-arm", "linux-armel", "linux-mips64el", "linux-ppc", "linux-ppc64le",
+        "linux-s390x", "linux-x86", "openbsd-x86", "openbsd-x86-64", "sunos-sparc",
+        "sunos-sparcv9", "sunos-x86", "sunos-x86-64", "win32-x86", "linux-loongarch64",
+        "linux-riscv64", "dragonflybsd-x86-64"
+    )
+    for (platform in excludedPlatforms) {
+        exclude("com/sun/jna/$platform/**")
+    }
+    
+    // Relocate dependencies to avoid conflicts with other plugins
+    relocate("com.github.oshi", "io.github.earth1283.hardwareaudit.shadow.oshi")
+    relocate("oshi", "io.github.earth1283.hardwareaudit.shadow.oshi.core")
+    // JNA relocation causes UnsatisfiedLinkError because native libs aren't moved/found correctly
+    // relocate("com.sun.jna", "io.github.earth1283.hardwareaudit.shadow.jna")
+
+    // Minimize the jar - this will remove unused classes from dependencies
+    minimize()
 }
 
 tasks {
