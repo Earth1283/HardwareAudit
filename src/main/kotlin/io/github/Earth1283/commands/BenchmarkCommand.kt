@@ -10,6 +10,7 @@ import io.github.Earth1283.utils.HardwareInfo
 import io.github.Earth1283.utils.Judgement
 import io.github.Earth1283.utils.PassMarkFetcher
 import net.kyori.adventure.text.minimessage.MiniMessage
+import org.bukkit.Bukkit
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -143,6 +144,10 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
             "claims" -> {
                 runClaimsCheck(sender)
             }
+            "neighbors" -> {
+                sender.sendMessage(mm.deserialize("<yellow>Scanning for neighbors...</yellow>"))
+                scanNeighbors(sender)
+            }
             "nuke", "stress" -> {
                  sender.sendMessage(mm.deserialize("<gradient:#ff0000:#550000><bold>⚠ INITIATING SYSTEM NUKE (300s) ⚠</bold></gradient>"))
                  sender.sendMessage(mm.deserialize("<red>This will MAX OUT your CPU, RAM, and DISK for 5 minutes.</red>"))
@@ -174,6 +179,67 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
             else -> sendHelp(sender)
         }
         return true
+    }
+
+    private fun scanNeighbors(sender: CommandSender) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
+            // 1. Process Scan
+            val os = oshi.SystemInfo().operatingSystem
+            val allProcesses = os.processes
+            val currentPid = os.processId
+            
+            val mcStrings = listOf("java", "-Xmx", "org.bukkit.", "net.minecraft.", "paper.jar", "spigot.jar", "velocity.jar", "bungeecord.jar")
+            
+            val neighborProcesses = allProcesses.filter { p ->
+                if (p.processID == currentPid) return@filter false
+                val cmd = p.commandLine?.lowercase() ?: ""
+                val name = p.name.lowercase()
+                
+                (name.contains("java") || cmd.contains("java")) && mcStrings.any { cmd.contains(it.lowercase()) }
+            }
+
+            // 2. Port Scan (localhost:10,000-65,535) - Parallelized for speed
+            val detectedPorts = java.util.Collections.synchronizedList(ArrayList<Int>())
+            val portExecutor = java.util.concurrent.Executors.newFixedThreadPool(100)
+            val futures = ArrayList<java.util.concurrent.Future<*>>()
+
+            for (port in 10000..65535) {
+                val future = portExecutor.submit {
+                    try {
+                        java.net.Socket().use { socket ->
+                            socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 50)
+                            detectedPorts.add(port)
+                        }
+                    } catch (e: Exception) {
+                        // Port closed
+                    }
+                }
+                futures.add(future)
+            }
+
+            // Wait for all port scans to finish
+            for (f in futures) {
+                try { f.get() } catch (e: Exception) {}
+            }
+            portExecutor.shutdown()
+            
+            // Current server port
+            val currentPort = Bukkit.getPort()
+            val otherPorts = detectedPorts.filter { it != currentPort }
+
+            sender.sendMessage(mm.deserialize("\n<gradient:#55ff55:#33aa33><bold>Neighbor Audit Results</bold></gradient>"))
+            sender.sendMessage(mm.deserialize("<gray>Process Scan:</gray> <white>${neighborProcesses.size} other Java/MC instances</white>"))
+            sender.sendMessage(mm.deserialize("<gray>Port Scan (Localhost):</gray> <white>${otherPorts.size} active ports (10k-65k)</white>"))
+            
+            val totalNeighbors = maxOf(neighborProcesses.size, otherPorts.size)
+            val crowdedness = if (totalNeighbors == 0) "<green>Isolated (Good)</green>"
+                             else if (totalNeighbors < 3) "<yellow>Cozy</yellow>"
+                             else if (totalNeighbors < 10) "<red>Crowded</red>"
+                             else "<red><bold>Slumlord detected</bold></red>"
+            
+            sender.sendMessage(mm.deserialize("<gray>Crowdedness Rating:</gray> $crowdedness"))
+            sender.sendMessage(mm.deserialize("<dark_gray><i>Note: Port scan (10k-65k) detects all active services, not just MC.</i></dark_gray>"))
+        })
     }
 
     private fun runClaimsCheck(sender: CommandSender) {
@@ -321,7 +387,7 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String>? {
         if (args.size == 1) {
-            return mutableListOf("cpu", "cpumulti", "steal", "mspt", "disk", "memory", "network", "specs", "all", "score", "claims", "nuke").filter { it.startsWith(args[0], true) }.toMutableList()
+            return mutableListOf("cpu", "cpumulti", "steal", "mspt", "disk", "memory", "network", "specs", "all", "score", "claims", "nuke", "neighbors").filter { it.startsWith(args[0], true) }.toMutableList()
         }
         if (args.size == 2 && (args[0].equals("cpu", true) || args[0].equals("cpumulti", true) || args[0].equals("steal", true) || args[0].equals("mspt", true))) {
              return mutableListOf("10", "30", "60")
@@ -341,6 +407,7 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
         sender.sendMessage(mm.deserialize("<yellow>/audit memory</yellow> <gray>- Test Memory throughput.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit network</yellow> <gray>- Test Download Speed.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit claims</yellow> <gray>- Run ALL tests to verify host validity.</gray>"))
+        sender.sendMessage(mm.deserialize("<yellow>/audit neighbors</yellow> <gray>- Scan for other MC servers on the host.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit nuke</yellow> <gray>- <red>STRESS TEST EVERYTHING (5m).</red></gray>"))
         sender.sendMessage(mm.deserialize("<dark_gray>--------------------------------</dark_gray>"))
     }
