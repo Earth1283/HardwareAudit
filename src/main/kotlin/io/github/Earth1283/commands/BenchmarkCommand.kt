@@ -14,6 +14,7 @@ import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.command.TabCompleter
+import java.util.concurrent.CompletableFuture
 
 import io.github.Earth1283.benchmarks.NetworkBenchmark
 
@@ -141,6 +142,34 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
             }
             "claims" -> {
                 runClaimsCheck(sender)
+            }
+            "nuke", "stress" -> {
+                 sender.sendMessage(mm.deserialize("<gradient:#ff0000:#550000><bold>⚠ INITIATING SYSTEM NUKE (300s) ⚠</bold></gradient>"))
+                 sender.sendMessage(mm.deserialize("<red>This will MAX OUT your CPU, RAM, and DISK for 5 minutes.</red>"))
+                 sender.sendMessage(mm.deserialize("<red>The server WILL freeze. Do not panic.</red>"))
+                 
+                 // Run all violent tests
+                 val cpuFuture = cpuBenchmark.runMultiCpuTest(300)
+                 val memFuture = memoryBenchmark.runMemoryTest(300)
+                 val diskFuture = diskBenchmark.runSustainedDiskTest(300)
+                 
+                 CompletableFuture.allOf(cpuFuture, memFuture, diskFuture).thenRun {
+                     try {
+                         val cpuRes = cpuFuture.get()
+                         val memRes = memFuture.get()
+                         val diskRes = diskFuture.get()
+                         
+                         sender.sendMessage(mm.deserialize("\n<gradient:#00ff00:#ff0000><bold>SYSTEM SURVIVED THE NUKE</bold></gradient>"))
+                         sender.sendMessage(mm.deserialize("<gray>Violent CPU:</gray> <white>${cpuRes.score}</white>"))
+                         sender.sendMessage(mm.deserialize("<gray>Violent RAM:</gray> <white>${memRes.score}</white>"))
+                         sender.sendMessage(mm.deserialize("<gray>Sustained Disk:</gray> <white>${diskRes.score}</white>"))
+                         
+                         sender.sendMessage(mm.deserialize("<yellow>If you can read this, your host is solid (or at least didn't crash).</yellow>"))
+                     } catch (e: Exception) {
+                         sender.sendMessage(mm.deserialize("<red>Error retrieving nuke results: ${e.message}</red>"))
+                         e.printStackTrace()
+                     }
+                 }
             }
             else -> sendHelp(sender)
         }
@@ -292,7 +321,7 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String>? {
         if (args.size == 1) {
-            return mutableListOf("cpu", "cpumulti", "steal", "mspt", "disk", "memory", "network", "specs", "all", "score", "claims").filter { it.startsWith(args[0], true) }.toMutableList()
+            return mutableListOf("cpu", "cpumulti", "steal", "mspt", "disk", "memory", "network", "specs", "all", "score", "claims", "nuke").filter { it.startsWith(args[0], true) }.toMutableList()
         }
         if (args.size == 2 && (args[0].equals("cpu", true) || args[0].equals("cpumulti", true) || args[0].equals("steal", true) || args[0].equals("mspt", true))) {
              return mutableListOf("10", "30", "60")
@@ -312,6 +341,7 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
         sender.sendMessage(mm.deserialize("<yellow>/audit memory</yellow> <gray>- Test Memory throughput.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit network</yellow> <gray>- Test Download Speed.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit claims</yellow> <gray>- Run ALL tests to verify host validity.</gray>"))
+        sender.sendMessage(mm.deserialize("<yellow>/audit nuke</yellow> <gray>- <red>STRESS TEST EVERYTHING (5m).</red></gray>"))
         sender.sendMessage(mm.deserialize("<dark_gray>--------------------------------</dark_gray>"))
     }
 }

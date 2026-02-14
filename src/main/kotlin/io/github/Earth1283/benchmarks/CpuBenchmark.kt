@@ -10,6 +10,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 class CpuBenchmark(private val plugin: HardwareAudit) {
     private val mm = MiniMessage.miniMessage()
@@ -20,11 +21,11 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
             val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
             var passes = 0L
-            val size = 100_000 // Calculate primes up to 100k
+            val size = 1_000_000 // Violent: Primes up to 1M
             
-            // Prime Sieve Loop
+            // Prime Sieve Loop + FPU Stress
             while (System.currentTimeMillis() < endTime) {
-                runSieve(size)
+                runViolentOp(size)
                 passes++
             }
             
@@ -34,12 +35,12 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
             val remark = Judgement.getCpuRemark(scoreVal)
             
             val details = mm.deserialize("""
-                <gradient:#00ff00:#00aaaa><bold>Single-Threaded CPU Benchmark</bold></gradient>
-                <gray>Score:</gray> <#ffd700>${scoreStr} ops/sec</#ffd700>
-                <hover:show_text:'<gray>Measures single-core performance using a Prime Sieve (100k). Critical for Minecraft main thread performance.</gray>'>[?]</hover>
+                <gradient:#00ff00:#00aaaa><bold>Single-Threaded Violent CPU Benchmark</bold></gradient>
+                <gray>Score:</gray> <#ffd700>${scoreStr} HeavyOps/s</#ffd700>
+                <hover:show_text:'<gray>Measures single-core performance using a 1M Prime Sieve + FPU stress (Math.tan/fma). Heavily stresses cache and pipeline.</gray>'>[?]</hover>
             """.trimIndent())
 
-            future.complete(BenchmarkResult("CPU (ST)", "$scoreStr ops/s", remark, details))
+            future.complete(BenchmarkResult("CPU (ST)", "$scoreStr HeavyOps/s", remark, details))
         })
         
         return future
@@ -53,12 +54,12 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
             val executor = Executors.newFixedThreadPool(cores)
             val totalPasses = AtomicLong(0)
             val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
-            val size = 100_000
+            val size = 1_000_000 // Violent: Primes up to 1M
 
             for (i in 0 until cores) {
                 executor.submit {
                     while (System.currentTimeMillis() < endTime) {
-                        runSieve(size)
+                        runViolentOp(size)
                         totalPasses.incrementAndGet()
                     }
                 }
@@ -77,20 +78,21 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
             val remark = Judgement.getMultiCpuRemark(scoreVal, cores)
             
             val details = mm.deserialize("""
-                <gradient:#ff5555:#ffaa00><bold>Multi-Threaded CPU Benchmark</bold></gradient>
-                <gray>Total Score:</gray> <#ffd700>${scoreStr} ops/sec</#ffd700>
+                <gradient:#ff5555:#ffaa00><bold>Multi-Threaded Violent CPU Benchmark</bold></gradient>
+                <gray>Total Score:</gray> <#ffd700>${scoreStr} HeavyOps/s</#ffd700>
                 <gray>Cores utilized:</gray> <white>$cores</white>
-                <gray>Per-core avg:</gray> <white>%.2f ops/sec</white>
-                <hover:show_text:'<gray>Saturates all $cores logical cores. Tests multi-threaded performance, thermal stability, and host core-claims.</gray>'>[?]</hover>
+                <gray>Per-core avg:</gray> <white>%.2f HeavyOps/s</white>
+                <hover:show_text:'<gray>Saturates all $cores logical cores with violent FPU/Cache workload. Tests thermal throttling and max power draw.</gray>'>[?]</hover>
             """.trimIndent().format(perCoreScore))
 
-            future.complete(BenchmarkResult("CPU (MT)", "$scoreStr ops/s", remark, details))
+            future.complete(BenchmarkResult("CPU (MT)", "$scoreStr HeavyOps/s", remark, details))
         })
         
         return future
     }
 
-    private fun runSieve(size: Int) {
+    private fun runViolentOp(size: Int) {
+        // 1. Large Prime Sieve (Memory/Cache Intensive)
         val flags = java.util.BitSet(size + 1)
         flags.set(0, size + 1) // Set all to true
         flags.set(0, false)
@@ -102,6 +104,18 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
                     flags.set(k, false)
                 }
             }
+        }
+
+        // 2. FPU/AVX Stress (Compute Intensive)
+        // Math.fma (Fused Multiply Add) is often intrinsic and uses AVX units
+        var acc = 0.0
+        for (j in 0 until 1000) {
+            acc = Math.fma(j.toDouble(), tan(j.toDouble()), acc)
+        }
+        // Consume result to avoid dead code elimination (though volatile or return might be better, this is usually enough in random loops)
+        if (acc.isNaN()) {
+            // Unlikely, just to use the value
+            print("NaN")
         }
     }
 }

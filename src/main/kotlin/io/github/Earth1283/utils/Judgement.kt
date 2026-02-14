@@ -6,20 +6,20 @@ object Judgement {
     private val mm = MiniMessage.miniMessage()
 
     fun getCpuRemark(opsPerSec: Double): String {
-        if (opsPerSec > 5000) return "<green>Absolute Beast. Single-core monster.</green>"
-        if (opsPerSec > 3000) return "<green>Great. Perfect for high-performance Minecraft.</green>"
-        if (opsPerSec > 1500) return "<yellow>Decent. It'll get the job done, mostly.</yellow>"
-        if (opsPerSec > 500) return "<yellow>Mediocre. Your host is likely using old hardware.</yellow>"
-        if (opsPerSec > 100) return "<red>Slow. Expect TPS drops during world gen.</red>"
+        if (opsPerSec > 250) return "<green>Absolute Beast. Single-core monster.</green>"
+        if (opsPerSec > 150) return "<green>Great. Perfect for high-performance Minecraft.</green>"
+        if (opsPerSec > 75) return "<yellow>Decent. It'll get the job done, mostly.</yellow>"
+        if (opsPerSec > 25) return "<yellow>Mediocre. Your host is likely using old hardware.</yellow>"
+        if (opsPerSec > 5) return "<red>Slow. Expect TPS drops during world gen.</red>"
         return "<red><bold>Potato Detected.</bold> Is this a Raspberry Pi 1?</red>"
     }
 
     fun getMultiCpuRemark(opsPerSec: Double, cores: Int): String {
         val totalScore = opsPerSec
-        if (totalScore > 40000) return "<green>Insane throughput. This machine is a powerhouse.</green>"
-        if (totalScore > 20000) return "<green>Solid multi-core performance.</green>"
-        if (totalScore > 10000) return "<yellow>Respectable for a mid-range server.</yellow>"
-        if (totalScore > 5000) return "<red>Weak multi-core. Fine for one server, bad for a network.</red>"
+        if (totalScore > 2000) return "<green>Insane throughput. This machine is a powerhouse.</green>"
+        if (totalScore > 1000) return "<green>Solid multi-core performance.</green>"
+        if (totalScore > 500) return "<yellow>Respectable for a mid-range server.</yellow>"
+        if (totalScore > 250) return "<red>Weak multi-core. Fine for one server, bad for a network.</red>"
         return "<red><bold>Total Garbage.</bold> My phone has more compute power.</red>"
     }
 

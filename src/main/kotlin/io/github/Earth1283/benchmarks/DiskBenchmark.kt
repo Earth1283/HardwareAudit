@@ -4,7 +4,6 @@ import io.github.Earth1283.HardwareAudit
 import io.github.Earth1283.utils.BenchmarkResult
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
-import org.bukkit.command.CommandSender
 import java.io.File
 import java.util.concurrent.CompletableFuture
 
@@ -97,6 +96,73 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             """.trimIndent())
             
             future.complete(BenchmarkResult("Disk", "$wScore MB/s (W)", remark, details))
+        })
+        
+        return future
+    }
+
+    // New Sustained Test for "Nuke" command
+    fun runSustainedDiskTest(durationSeconds: Int): CompletableFuture<BenchmarkResult> {
+        val future = CompletableFuture<BenchmarkResult>()
+        
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
+            val tempFile = File(plugin.dataFolder, "disk_nuke.tmp")
+            if (!plugin.dataFolder.exists()) {
+                plugin.dataFolder.mkdirs()
+            }
+            
+            val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
+            val chunkSize = 1L * 1024 * 1024 * 1024 // 1GB Chunks
+            val bufferSize = 64 * 1024 // 64KB Buffer
+            val buffer = ByteArray(bufferSize)
+            java.util.Random().nextBytes(buffer)
+            
+            var totalWritten = 0L
+            var totalRead = 0L
+            
+            try {
+                while (System.currentTimeMillis() < endTime) {
+                    // Write 1GB
+                    java.io.FileOutputStream(tempFile).use { fos ->
+                        var written = 0L
+                        while (written < chunkSize) {
+                            fos.write(buffer)
+                            written += bufferSize
+                        }
+                        fos.fd.sync()
+                    }
+                    totalWritten += chunkSize
+                    
+                    // Read 1GB
+                    java.io.FileInputStream(tempFile).use { fis ->
+                        val readBuffer = ByteArray(bufferSize)
+                        while (fis.read(readBuffer) != -1) { }
+                    }
+                    totalRead += chunkSize
+                    
+                    // Delete and repeat
+                    tempFile.delete()
+                }
+            } catch (e: Exception) {
+                 // Ignore, maybe disk full or permission
+            } finally {
+                if (tempFile.exists()) tempFile.delete()
+            }
+            
+            // Calculate Average Throughput
+            val totalTransferred = totalWritten + totalRead
+            val avgSpeed = (totalTransferred / 1024.0 / 1024.0) / durationSeconds
+            val scoreStr = "%.2f".format(avgSpeed)
+            val remark = io.github.Earth1283.utils.Judgement.getDiskRemark(avgSpeed) // Reuse remark logic
+            
+            val details = mm.deserialize("""
+                <gradient:#ff0000:#ff5500><bold>Sustained Disk Saturation Finished!</bold></gradient>
+                <gray>Avg Throughput:</gray> <#ff4500>${scoreStr} MB/s</#ff4500>
+                <gray>Total Data Moved:</gray> <white>${totalTransferred / 1024 / 1024 / 1024} GB</white>
+                <hover:show_text:'<gray>Sustained 1GB Read/Write loops for $durationSeconds seconds. Measures thermal throttling and sustained controller performance.</gray>'>[?]</hover>
+            """.trimIndent())
+            
+             future.complete(BenchmarkResult("Disk (Sustained)", "$scoreStr MB/s", remark, details))
         })
         
         return future

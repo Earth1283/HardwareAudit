@@ -6,34 +6,48 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.min
 
 class MemoryBenchmark(private val plugin: HardwareAudit) {
     private val mm = MiniMessage.miniMessage()
 
-    fun runMemoryTest(): CompletableFuture<BenchmarkResult> {
+    fun runMemoryTest(durationSeconds: Int = 15): CompletableFuture<BenchmarkResult> {
         val future = CompletableFuture<BenchmarkResult>()
         val threads = Runtime.getRuntime().availableProcessors()
         
         Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
             val workerThreads = ArrayList<Thread>()
             val throughputPasses = AtomicLong(0)
-            val durationSeconds = 15
             val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
-            val blockSize = 32 * 1024 * 1024 // 32MB
             
-            // 1. THROUGHPUT TEST (Sequential Copy)
+            // Dynamic Block Size Calculation
+            // Target: 256MB per thread to bust L3 cache, but respect heap limits
+            val maxMemory = Runtime.getRuntime().maxMemory()
+            val safeMemory = (maxMemory * 0.6).toLong() // Use at most 60% of heap
+            val safePerThread = safeMemory / threads / 2 // 2 arrays per thread (src, dst)
+            val targetBlockSize = 256L * 1024 * 1024 // 256MB
+            
+            // Ensure at least 1MB, max 256MB
+            var blockSizeLong = min(targetBlockSize, safePerThread)
+            if (blockSizeLong < 1024 * 1024) blockSizeLong = 1024 * 1024 
+            val blockSize = blockSizeLong.toInt()
+            
+            // 1. THROUGHPUT TEST (Sequential Copy - Violent Bandwidth Saturation)
             for (i in 0 until threads) {
                 val t = Thread {
                     try {
                         val src = ByteArray(blockSize)
                         val dst = ByteArray(blockSize)
+                        // Fill once
                         java.util.Random().nextBytes(src)
                         
                         while (System.currentTimeMillis() < endTime) {
                             System.arraycopy(src, 0, dst, 0, blockSize)
                             throughputPasses.addAndGet(1)
                         }
-                    } catch (e: OutOfMemoryError) {}
+                    } catch (e: OutOfMemoryError) {
+                        // If we OOM, just stop this thread
+                    }
                 }
                 workerThreads.add(t)
                 t.start()
@@ -41,29 +55,33 @@ class MemoryBenchmark(private val plugin: HardwareAudit) {
             
             for (t in workerThreads) t.join()
             
-            // 2. LATENCY TEST (Random Access)
+            // 2. LATENCY TEST (Random Access / Pointer Chasing)
+            // Increased to 16M ints (64MB) to ensure we hit main memory latency
             val latencyStart = System.nanoTime()
-            val listSize = 1_000_000
+            val listSize = 16_000_000 
             val array = IntArray(listSize) { it }
-            array.shuffle() // Randomize indices for a "linked list" like traversal
+            array.shuffle() // Randomize indices
             
             var current = 0
+            // Traverse 10M times
             for (i in 0 until 10_000_000) {
                 current = array[current]
             }
             val latencyEnd = System.nanoTime()
             val latencyNs = (latencyEnd - latencyStart) / 10_000_000.0
 
-            val totalBytes = throughputPasses.get() * blockSize
+            // Calc results
+            val totalBytes = throughputPasses.get() * blockSize.toLong()
             val mbPerSec = (totalBytes / 1024.0 / 1024.0) / durationSeconds
             val scoreStr = "%.2f".format(mbPerSec)
             val remark = io.github.Earth1283.utils.Judgement.getMemoryRemark(mbPerSec)
             
             val details = mm.deserialize("""
                 <gradient:#00ff00:#00aaaa><bold>Rigorous RAM Benchmark Finished!</bold></gradient>
+                <gray>Block Size:</gray> <white>${blockSize / 1024 / 1024} MB</white>
                 <gray>Throughput:</gray> <#00bfff>${scoreStr} MB/s</#00bfff>
                 <gray>Est. Latency:</gray> <#ff8c00>%.2f ns</#ff8c00>
-                <hover:show_text:'<gray>Throughput: Multi-threaded memory copy speed (All cores). Latency: Average time to access a random memory address (Pointer chasing).</gray>'>[?]</hover>
+                <hover:show_text:'<gray>Violent Throughput: ${blockSize / 1024 / 1024}MB blocks per thread (Main Memory Saturation). Latency: 64MB Random Walk.</gray>'>[?]</hover>
             """.trimIndent().format(latencyNs))
             
             future.complete(BenchmarkResult("RAM", "$scoreStr MB/s", remark, details))
