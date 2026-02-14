@@ -26,6 +26,16 @@ object HardwareInfo {
         sb.append("<gray>Swap:</gray> <white>${formatBytes(memory.virtualMemory.swapUsed)}</white> / <white>${formatBytes(memory.virtualMemory.swapTotal)}</white>\n")
         
         sb.append("<gray>OS:</gray> <white>$os</white>\n")
+        
+        // Virtualization check (Simple heuristic)
+        val model = si.hardware.computerSystem.model.lowercase()
+        val manufacturer = si.hardware.computerSystem.manufacturer.lowercase()
+        if (model.contains("kvm") || model.contains("virtual") || model.contains("vmware") || manufacturer.contains("amazon") || manufacturer.contains("google") || manufacturer.contains("digitalocean")) {
+            sb.append("<gray>Environment:</gray> <yellow>Virtual Machine (VPS)</yellow>\n")
+        } else {
+            sb.append("<gray>Environment:</gray> <green>Bare Metal (Dedicated)</green>\n")
+        }
+
         sb.append("<gray>Uptime:</gray> <white>${formatDuration(os.systemUptime)}</white>\n")
 
         val runtimeMx = ManagementFactory.getRuntimeMXBean()

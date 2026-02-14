@@ -17,17 +17,17 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
             val tempFile = File(plugin.dataFolder, "disk_test.tmp")
-            // Create data folder if not exists
             if (!plugin.dataFolder.exists()) {
                 plugin.dataFolder.mkdirs()
             }
 
-            // 2GB File for aggressive testing
-            val sizeBytes = 2L * 1024 * 1024 * 1024 // 2GB
-            val bufferSize = 8192 // 8KB buffer
+            // 4GB File for rigorous testing
+            val sizeBytes = 4L * 1024 * 1024 * 1024 // 4GB
+            val bufferSize = 64 * 1024 // 64KB buffer for faster sequential write
             val buffer = ByteArray(bufferSize)
+            java.util.Random().nextBytes(buffer) // Fill with random data to avoid compression cheating
             
-            // WRITE TEST
+            // 1. SEQUENTIAL WRITE TEST
             val writeStart = System.currentTimeMillis()
             try {
                 java.io.FileOutputStream(tempFile).use { fos ->
@@ -36,6 +36,7 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
                         fos.write(buffer)
                         written += bufferSize
                     }
+                    fos.fd.sync() // Ensure it's on disk
                 }
             } catch (e: Exception) {
                 future.completeExceptionally(e)
@@ -45,18 +46,35 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             val writeTimeSec = (writeEnd - writeStart) / 1000.0
             val writeSpeed = (sizeBytes / 1024.0 / 1024.0) / writeTimeSec
 
-            // READ TEST
+            // 2. RANDOM I/O TEST (Simulate database/plugin load)
+            val randomIoStart = System.currentTimeMillis()
+            var randomOps = 0
+            try {
+                java.io.RandomAccessFile(tempFile, "rw").use { raf ->
+                    val smallBuffer = ByteArray(4096) // 4KB blocks
+                    for (i in 0 until 1000) {
+                        val pos = (Math.random() * (sizeBytes - 4096)).toLong()
+                        raf.seek(pos)
+                        raf.read(smallBuffer)
+                        raf.seek(pos)
+                        raf.write(smallBuffer)
+                        randomOps++
+                    }
+                    raf.getFD().sync()
+                }
+            } catch (e: Exception) {}
+            val randomIoEnd = System.currentTimeMillis()
+            val randomIoTimeMs = (randomIoEnd - randomIoStart).toDouble()
+            val iops = (randomOps / (randomIoTimeMs / 1000.0))
+
+            // 3. SEQUENTIAL READ TEST
             val readStart = System.currentTimeMillis()
             try {
                 java.io.FileInputStream(tempFile).use { fis ->
-                    var read = 0
-                    while (read != -1) {
-                         read = fis.read(buffer)
-                    }
+                    val readBuffer = ByteArray(bufferSize)
+                    while (fis.read(readBuffer) != -1) { }
                 }
-            } catch (e: Exception) {
-               // ignore read error
-            }
+            } catch (e: Exception) { }
             val readEnd = System.currentTimeMillis()
             val readTimeSec = (readEnd - readStart) / 1000.0
             val readSpeed = (sizeBytes / 1024.0 / 1024.0) / readTimeSec
@@ -64,20 +82,21 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             // Cleanup
             tempFile.delete()
 
-            // Format results
             val wScore = "%.2f".format(writeSpeed)
             val rScore = "%.2f".format(readSpeed)
+            val iopsScore = "%.0f".format(iops)
             
-            // Judgement based on write speed primarily
             val remark = io.github.Earth1283.utils.Judgement.getDiskRemark(writeSpeed)
             
             val details = mm.deserialize("""
-                <gradient:#00ff00:#00aaaa><bold>Disk I/O Benchmark Finished!</bold></gradient>
-                <gray>Write:</gray> <#ff4500>${wScore} MB/s</#ff4500> <gray>Read:</gray> <#32cd32>${rScore} MB/s</#32cd32>
-                <hover:show_text:'<gray>Sequential Write/Read speed of a 2GB file.</gray>'>[?]</hover>
+                <gradient:#00ff00:#00aaaa><bold>Rigorous Disk Benchmark Finished!</bold></gradient>
+                <gray>Seq Write:</gray> <#ff4500>${wScore} MB/s</#ff4500>
+                <gray>Seq Read:</gray> <#32cd32>${rScore} MB/s</#32cd32>
+                <gray>Random I/O:</gray> <#ffd700>${iopsScore} IOPS (4KB RW)</#ffd700>
+                <hover:show_text:'<gray>Sequential 4GB Read/Write + 1000 random 4KB operations. IOPS indicates how well your host handles databases/plugins.</gray>'>[?]</hover>
             """.trimIndent())
             
-            future.complete(BenchmarkResult("Disk", "$wScore MB/s (Write)", remark, details))
+            future.complete(BenchmarkResult("Disk", "$wScore MB/s (W)", remark, details))
         })
         
         return future

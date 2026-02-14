@@ -84,8 +84,17 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
             }
             "cpu" -> {
                 val duration = args.getOrNull(1)?.toIntOrNull() ?: 30
-                sender.sendMessage(mm.deserialize("<yellow>Running Aggressive CPU Benchmark ($duration s)...</yellow>"))
+                sender.sendMessage(mm.deserialize("<yellow>Running Single-Threaded CPU Benchmark ($duration s)...</yellow>"))
                 cpuBenchmark.runCpuTest(duration).thenAccept { result ->
+                    sender.sendMessage(result.details)
+                    sender.sendMessage(mm.deserialize(result.judgement))
+                }
+            }
+            "cpumulti" -> {
+                val duration = args.getOrNull(1)?.toIntOrNull() ?: 30
+                sender.sendMessage(mm.deserialize("<gradient:#ff5555:#ffaa00><bold>Saturating ALL CPU cores ($duration s)...</bold></gradient>"))
+                sender.sendMessage(mm.deserialize("<red><i>Expect severe lag during this test.</i></red>"))
+                cpuBenchmark.runMultiCpuTest(duration).thenAccept { result ->
                     sender.sendMessage(result.details)
                     sender.sendMessage(mm.deserialize(result.judgement))
                 }
@@ -217,34 +226,35 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
 
 
     private fun runAllBenchmarks(sender: CommandSender) {
-        sender.sendMessage(mm.deserialize("<gradient:#ff0000:#ffff00><bold>STARTING FULL HARDWARE AUDIT</bold></gradient>"))
-        sender.sendMessage(mm.deserialize("<gray>This will take about 60-90 seconds and <st>may</st> <bold><red>WILL</red></bold> lag the server.</gray>"))
+        sender.sendMessage(mm.deserialize("<gradient:#ff0000:#ffff00><bold>STARTING RIGOROUS HARDWARE AUDIT</bold></gradient>"))
+        sender.sendMessage(mm.deserialize("<gray>This will take about 120 seconds and <bold><red>WILL</red></bold> lag the server.</gray>"))
         
         val results = java.util.Collections.synchronizedList(ArrayList<io.github.Earth1283.utils.BenchmarkResult>())
         
-        // Chain them sequentially to minimize interference
-        // CPU -> RAM -> Disk -> Network -> Steal -> MSPT
-        
-        sender.sendMessage(mm.deserialize("<gray>[1/6] Running CPU Test...</gray>"))
+        sender.sendMessage(mm.deserialize("<gray>[1/7] Running CPU Single-Thread Test...</gray>"))
         cpuBenchmark.runCpuTest(15).thenCompose { res ->
             results.add(res)
-            sender.sendMessage(mm.deserialize("<gray>[2/6] Running Memory Test...</gray>"))
+            sender.sendMessage(mm.deserialize("<gray>[2/7] Running CPU Multi-Thread Test...</gray>"))
+            cpuBenchmark.runMultiCpuTest(15)
+        }.thenCompose { res ->
+            results.add(res)
+            sender.sendMessage(mm.deserialize("<gray>[3/7] Running Memory Test...</gray>"))
             memoryBenchmark.runMemoryTest()
         }.thenCompose { res ->
             results.add(res)
-            sender.sendMessage(mm.deserialize("<gray>[3/6] Running Disk Test...</gray>"))
+            sender.sendMessage(mm.deserialize("<gray>[4/7] Running Disk Test...</gray>"))
             diskBenchmark.runDiskTest()
         }.thenCompose { res ->
             results.add(res)
-            sender.sendMessage(mm.deserialize("<gray>[4/6] Testing Network...</gray>"))
+            sender.sendMessage(mm.deserialize("<gray>[5/7] Testing Network...</gray>"))
             networkBenchmark.runNetworkTest()
         }.thenCompose { res ->
             results.add(res)
-            sender.sendMessage(mm.deserialize("<gray>[5/6] Measuring Steal...</gray>"))
+            sender.sendMessage(mm.deserialize("<gray>[6/7] Measuring Steal...</gray>"))
             stealBenchmark.measureStealTime(10)
         }.thenCompose { res ->
             results.add(res)
-            sender.sendMessage(mm.deserialize("<gray>[6/6] Monitoring MSPT...</gray>"))
+            sender.sendMessage(mm.deserialize("<gray>[7/7] Monitoring MSPT...</gray>"))
             msptBenchmark.monitorMspt(10)
         }.thenAccept { res ->
             results.add(res)
@@ -282,9 +292,9 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String>? {
         if (args.size == 1) {
-            return mutableListOf("cpu", "steal", "mspt", "disk", "memory", "network", "specs", "all", "score", "claims").filter { it.startsWith(args[0], true) }.toMutableList()
+            return mutableListOf("cpu", "cpumulti", "steal", "mspt", "disk", "memory", "network", "specs", "all", "score", "claims").filter { it.startsWith(args[0], true) }.toMutableList()
         }
-        if (args.size == 2 && (args[0].equals("cpu", true) || args[0].equals("steal", true) || args[0].equals("mspt", true))) {
+        if (args.size == 2 && (args[0].equals("cpu", true) || args[0].equals("cpumulti", true) || args[0].equals("steal", true) || args[0].equals("mspt", true))) {
              return mutableListOf("10", "30", "60")
         }
         return null
@@ -294,7 +304,8 @@ class BenchmarkCommand(private val plugin: HardwareAudit) : CommandExecutor, Tab
         sender.sendMessage(mm.deserialize("<dark_gray>--------------------------------</dark_gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit specs</yellow> <gray>- View hardware & JVM details.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit score</yellow> <gray>- Check PassMark score for this CPU.</gray>"))
-        sender.sendMessage(mm.deserialize("<yellow>/audit cpu [sec]</yellow> <gray>- Benchmark CPU performance.</gray>"))
+        sender.sendMessage(mm.deserialize("<yellow>/audit cpu [sec]</yellow> <gray>- Single-core CPU benchmark.</gray>"))
+        sender.sendMessage(mm.deserialize("<yellow>/audit cpumulti [sec]</yellow> <gray>- Multi-core CPU saturation test.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit steal [sec]</yellow> <gray>- Measure scheduling delay/steal.</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit mspt [sec]</yellow> <gray>- Monitor tick stability (Std Dev).</gray>"))
         sender.sendMessage(mm.deserialize("<yellow>/audit disk</yellow> <gray>- Test Disk I/O speeds (NVMe detection).</gray>"))

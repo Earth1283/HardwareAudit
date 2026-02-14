@@ -6,40 +6,50 @@ object Judgement {
     private val mm = MiniMessage.miniMessage()
 
     fun getCpuRemark(opsPerSec: Double): String {
-        // Sieve passes per second.
-        // 5000+ is insane
-        // 2000+ is good
-        // 500+ is ok
-        if (opsPerSec > 5000) return "<green>Absolute Beast. NASA called, they want their PC back.</green>"
-        if (opsPerSec > 2000) return "<green>Respectable. It can run Crysis.</green>"
-        if (opsPerSec > 500) return "<yellow>Average. Just like your hosting provider's stupidity.</yellow>"
-        if (opsPerSec > 100) return "<red>Slow. My grandma types faster than this CPU calculates.</red>"
-        return "<red><bold>Potato Detected.</bold> My pocket calculator is faster. Upgrade immediately.</red>"
+        if (opsPerSec > 5000) return "<green>Absolute Beast. Single-core monster.</green>"
+        if (opsPerSec > 3000) return "<green>Great. Perfect for high-performance Minecraft.</green>"
+        if (opsPerSec > 1500) return "<yellow>Decent. It'll get the job done, mostly.</yellow>"
+        if (opsPerSec > 500) return "<yellow>Mediocre. Your host is likely using old hardware.</yellow>"
+        if (opsPerSec > 100) return "<red>Slow. Expect TPS drops during world gen.</red>"
+        return "<red><bold>Potato Detected.</bold> Is this a Raspberry Pi 1?</red>"
+    }
+
+    fun getMultiCpuRemark(opsPerSec: Double, cores: Int): String {
+        val totalScore = opsPerSec
+        if (totalScore > 40000) return "<green>Insane throughput. This machine is a powerhouse.</green>"
+        if (totalScore > 20000) return "<green>Solid multi-core performance.</green>"
+        if (totalScore > 10000) return "<yellow>Respectable for a mid-range server.</yellow>"
+        if (totalScore > 5000) return "<red>Weak multi-core. Fine for one server, bad for a network.</red>"
+        return "<red><bold>Total Garbage.</bold> My phone has more compute power.</red>"
     }
 
     fun getCpuNameRemark(name: String): String? {
         val n = name.lowercase()
-        if (n.contains("xeon")) return "<red><b>Xeon Detected:</b> Ancient server junk? Single-thread performance is critical for Minecraft, not 50 slow cores.</red>"
-        if (n.contains("atom")) return "<red><b>Atom Detected:</b> Is this running on a toaster or a netbook?</red>"
-        if (n.contains("celeron")) return "<red><b>Celeron Detected:</b> E-waste. Please recycle.</red>"
-        if (n.contains("pentium")) return "<red><b>Pentium Detected:</b> What year is it? 2005?</red>"
-        if (n.contains("opteron")) return "<red><b>Opteron Detected:</b> This belongs in a museum, not a datacenter.</red>"
-        if (n.contains("a-series")) return "<red><b>AMD A-Series:</b> Integrated graphics won't save you here.</red>"
-        if (n.contains("fx-")) return "<red><b>AMD FX:</b> Hope you have a fire extinguisher handy.</red>"
+        if (n.contains("xeon")) {
+             if (n.contains("e5-") || n.contains("e3-")) return "<red><b>Ancient Xeon:</b> This CPU belongs in a scrapyard, not a server rack.</red>"
+             return "<yellow><b>Xeon:</b> Solid for multi-tasking, but check that single-thread speed.</yellow>"
+        }
+        if (n.contains("gold") || n.contains("silver") || n.contains("platinum")) return "<green><b>Scalable Xeon:</b> Enterprise grade, but clock speeds might be low.</green>"
+        if (n.contains("ryzen") || n.contains("epyc") || n.contains("threadripper")) return "<green><b>Modern AMD:</b> Now we're talking. Performance per dollar is king here.</green>"
+        if (n.contains("atom")) return "<red><b>Atom:</b> This is literally a netbook CPU. Why?</red>"
+        if (n.contains("celeron") || n.contains("pentium")) return "<red><b>E-Waste:</b> Please stop hosting on this. For everyone's sake.</red>"
+        if (n.contains("fx-")) return "<red><b>AMD FX:</b> A space heater that occasionally calculates things.</red>"
         return null
     }
 
     fun getDiskRemark(mbPerSec: Double): String {
-        if (mbPerSec > 2000) return "<green>Blazing fast. NVMe goodness.</green>"
-        if (mbPerSec > 500) return "<yellow>Decent. Probably a SATA SSD.</yellow>"
-        if (mbPerSec > 100) return "<red>Spinning Rust (HDD) detected. Welcome to 2010.</red>"
-        return "<red><bold>Hamster Wheel Drive.</bold> Are you saving data to a floppy disk?</red>"
+        if (mbPerSec > 3000) return "<green>Gen4 NVMe? Blazing fast sequential speeds.</green>"
+        if (mbPerSec > 1500) return "<green>NVMe detected. Fast and reliable.</green>"
+        if (mbPerSec > 500) return "<yellow>SATA SSD. Decent, but dated.</yellow>"
+        if (mbPerSec > 100) return "<red>HDD (Spinning Rust). 2010 called, they want their drive back.</red>"
+        return "<red><bold>SD Card?</bold> This disk speed is pathologically slow.</red>"
     }
 
     fun getMemoryRemark(mbPerSec: Double): String {
-        if (mbPerSec > 10000) return "<green>Lightning fast memory.</green>"
-        if (mbPerSec > 5000) return "<yellow>It works.</yellow>"
-        return "<red>Is this RAM or just a really fast swap file?</red>"
+        if (mbPerSec > 25000) return "<green>DDR5 levels of speed. Excellent.</green>"
+        if (mbPerSec > 15000) return "<green>DDR4 Dual Channel. Solid.</green>"
+        if (mbPerSec > 5000) return "<yellow>A bit sluggish. Maybe single channel or slow RAM.</yellow>"
+        return "<red>Crawl-speed memory. This will bottleneck everything.</red>"
     }
 
     fun getStealRemark(stealPercent: Double): String {
@@ -58,19 +68,25 @@ object Judgement {
     fun getJvmRemark(args: List<String>): String? {
         var xmx: String? = null
         var xms: String? = null
+        var g1gc = false
+        var zgc = false
+        var shenandoah = false
         var parallel = false
         
         for (arg in args) {
             if (arg.startsWith("-Xmx")) xmx = arg
             if (arg.startsWith("-Xms")) xms = arg
+            if (arg.contains("UseG1GC")) g1gc = true
+            if (arg.contains("UseZGC")) zgc = true
+            if (arg.contains("UseShenandoahGC")) shenandoah = true
             if (arg.contains("UseParallelGC")) parallel = true
         }
         
-        if (parallel) return "<red><b>ParallelGC Detected:</b> Do you enjoy lag spikes? Use G1GC or ZGC.</red>"
-        if (xmx != null && xms != null && xmx != xms) return "<red><b>Aikar is crying:</b> Xmx != Xms. This causes heap resize lag. Fix your flags.</red>"
-        if (xmx == null) return "<red><b>No Flags Detected:</b> Running naked? You're brave.</red>"
+        if (parallel) return "<red><b>ParallelGC Detected:</b> Ancient GC for Minecraft. Use G1GC (or ZGC/Shenandoah).</red>"
+        if (!g1gc && !zgc && !shenandoah) return "<yellow><b>Generic GC:</b> Consider using Aikar's flags or G1GC for better TPS stability.</yellow>"
+        if (xmx != null && xms != null && xmx != xms) return "<red><b>Aikar is crying:</b> Xmx != Xms. This causes heap resize lag. Set them equal!</red>"
         
-        return "<green>JVM Flags look decent. (Or you hid them well).</green>"
+        return "<green>JVM Flags look solid.</green>"
     }
     fun getNetworkRemark(mbps: Double): String {
         if (mbps > 500) return "<green>Fiber optic? Blazing fast.</green>"
