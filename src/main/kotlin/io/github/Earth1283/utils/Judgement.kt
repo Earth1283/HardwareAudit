@@ -9,9 +9,9 @@ object Judgement {
         if (opsPerSec > 250) return "<green>Absolute Beast. Single-core monster.</green>"
         if (opsPerSec > 150) return "<green>Great. Perfect for high-performance Minecraft.</green>"
         if (opsPerSec > 75) return "<yellow>Decent. It'll get the job done, mostly.</yellow>"
-        if (opsPerSec > 25) return "<yellow>Mediocre. Your host is likely using old hardware.</yellow>"
-        if (opsPerSec > 5) return "<red>Slow. Expect TPS drops during world gen.</red>"
-        return "<red><bold>Potato Detected.</bold> Is this a Raspberry Pi 1?</red>"
+        if (opsPerSec > 25) return "<yellow>Mediocre. Your host is likely using a shared thread from 2012.</yellow>"
+        if (opsPerSec > 5) return "<red>Pathetic. Expect a slide-show when someone breaks a block.</red>"
+        return "<red><bold>Literal Garbage.</bold> My smart fridge has more single-core performance than this e-waste.</red>"
     }
 
     fun getMultiCpuRemark(opsPerSec: Double, cores: Int): String {
@@ -20,7 +20,7 @@ object Judgement {
         if (totalScore > 1000) return "<green>Solid multi-core performance.</green>"
         if (totalScore > 500) return "<yellow>Respectable for a mid-range server.</yellow>"
         if (totalScore > 250) return "<red>Weak multi-core. Fine for one server, bad for a network.</red>"
-        return "<red><bold>Total Garbage.</bold> My phone has more compute power.</red>"
+        return "<red><bold>Total Junk.</bold> Your host is overselling this node so hard it's legally fraud.</red>"
     }
 
     fun getCpuNameRemark(name: String): String? {
@@ -38,18 +38,20 @@ object Judgement {
     }
 
     fun getDiskRemark(mbPerSec: Double): String {
-        if (mbPerSec > 3000) return "<green>Gen4 NVMe? Blazing fast sequential speeds.</green>"
-        if (mbPerSec > 1500) return "<green>NVMe detected. Fast and reliable.</green>"
-        if (mbPerSec > 500) return "<yellow>SATA SSD. Decent, but dated.</yellow>"
-        if (mbPerSec > 100) return "<red>HDD (Spinning Rust). 2010 called, they want their drive back.</red>"
-        return "<red><bold>SD Card?</bold> This disk speed is pathologically slow.</red>"
+        if (mbPerSec > 10000) return "<green><bold>MY EYES!</bold> THE CONTROLLER IS MELTING! CALL THE FIRE DEPARTMENT!</green>"
+        if (mbPerSec > 5000) return "<green>Okay, we're actually partying now. This SSD is sweating.</green>"
+        if (mbPerSec > 3000) return "<green>Gen4 NVMe? Blazing fast. Your OS is finally happy.</green>"
+        if (mbPerSec > 1000) return "<yellow>Slightly faster than a carrier pigeon. Still boring.</yellow>"
+        if (mbPerSec > 500) return "<yellow>SATA SSD. Decent, but we're here to party, not fill out tax forms.</yellow>"
+        if (mbPerSec > 100) return "<red>Spinning Rust. Your disk is actually just a guy with a pen and paper. Embarrassing.</red>"
+        return "<red><bold>SD Card?</bold> This disk speed is pathologically slow. Stop hosting on a calculator.</red>"
     }
 
     fun getMemoryRemark(mbPerSec: Double): String {
         if (mbPerSec > 25000) return "<green>DDR5 levels of speed. Excellent.</green>"
         if (mbPerSec > 15000) return "<green>DDR4 Dual Channel. Solid.</green>"
-        if (mbPerSec > 5000) return "<yellow>A bit sluggish. Maybe single channel or slow RAM.</yellow>"
-        return "<red>Crawl-speed memory. This will bottleneck everything.</red>"
+        if (mbPerSec > 5000) return "<yellow>Sluggish RAM. Probably single-channel garbage.</yellow>"
+        return "<red>Crawl-speed memory. This bottleneck is offensive.</red>"
     }
 
     fun getStealRemark(stealPercent: Double): String {

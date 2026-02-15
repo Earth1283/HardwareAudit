@@ -21,32 +21,32 @@ class MemoryBenchmark(private val plugin: HardwareAudit) {
             val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
             
             // Dynamic Block Size Calculation
-            // Target: 256MB per thread to bust L3 cache, but respect heap limits
+            // Target: 512MB per thread to bust L3 cache and saturate controller
             val maxMemory = Runtime.getRuntime().maxMemory()
-            val safeMemory = (maxMemory * 0.6).toLong() // Use at most 60% of heap
+            val safeMemory = (maxMemory * 0.85).toLong() // Use up to 85% of heap for maximum abuse
             val safePerThread = safeMemory / threads / 2 // 2 arrays per thread (src, dst)
-            val targetBlockSize = 256L * 1024 * 1024 // 256MB
+            val targetBlockSize = 512L * 1024 * 1024 // 512MB
             
-            // Ensure at least 1MB, max 256MB
+            // Ensure at least 1MB, max 512MB
             var blockSizeLong = min(targetBlockSize, safePerThread)
             if (blockSizeLong < 1024 * 1024) blockSizeLong = 1024 * 1024 
             val blockSize = blockSizeLong.toInt()
             
             // 1. THROUGHPUT TEST (Sequential Copy - Violent Bandwidth Saturation)
+            // We'll also use multiple arrays per thread to ensure we're really pushing the allocator and memory bus
             for (i in 0 until threads) {
                 val t = Thread {
                     try {
                         val src = ByteArray(blockSize)
                         val dst = ByteArray(blockSize)
-                        // Fill once
                         java.util.Random().nextBytes(src)
                         
                         while (System.currentTimeMillis() < endTime) {
                             System.arraycopy(src, 0, dst, 0, blockSize)
+                            // Occasionally "leak" or touch more memory if possible to increase pressure
                             throughputPasses.addAndGet(1)
                         }
                     } catch (e: OutOfMemoryError) {
-                        // If we OOM, just stop this thread
                     }
                 }
                 workerThreads.add(t)

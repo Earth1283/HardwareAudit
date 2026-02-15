@@ -43,7 +43,6 @@ tasks.shadowJar {
     
     // Relocate dependencies to avoid conflicts with other plugins
     relocate("com.github.oshi", "io.github.earth1283.hardwareaudit.shadow.oshi")
-    relocate("oshi", "io.github.earth1283.hardwareaudit.shadow.oshi.core")
     // JNA relocation causes UnsatisfiedLinkError because native libs aren't moved/found correctly
     // relocate("com.sun.jna", "io.github.earth1283.hardwareaudit.shadow.jna")
 
