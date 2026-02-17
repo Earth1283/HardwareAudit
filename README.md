@@ -4,12 +4,14 @@
 
 A Paper/Spigot plugin designed to aggressively benchmark Minecraft server hardware, expose lies, and provide judgmental feedback on performance.
 
+This plugin works on all SpigotMC forks.
+
 ## Features
 
 ### 🔥 Aggressive Benchmarking
-- **CPU Stress Test**: Uses a **Prime Sieve (Sieve of Eratosthenes)** to hammer the CPU cache and branch prediction. No lightweight math here.
-- **Memory Saturation**: Launches **Multi-Threaded** copy operations to saturate available memory bandwidth across all cores.
-- **Disk I/O**: Writes and reads a 512MB file to detect slow HDD "spinning rust" or cheap SATA SSDs.
+- **CPU Stress Test**: Uses a **Prime Sieve (Sieve of Eratosthenes)** to saturate the CPU's cache and branch prediction. No lightweight math here.
+- **Memory Saturation**: Launches **Multi-Threaded** copy operations to saturate available memory bandwidth across all cores. Upcomming C/JNI implementation soon.
+- **Disk I/O**: Abuses C's O_DIRECT to write data directly to the disk to detect slow HDD "spinning rust" or cheap SATA SSDs.
 - **Steal Time**: Detects "noisy neighbors" on shared hosts by measuring CPU steal % and thread scheduling jitter.
 
 ### 📊 PassMark Integration
@@ -18,7 +20,7 @@ A Paper/Spigot plugin designed to aggressively benchmark Minecraft server hardwa
 
 ### 🤬 Judgement Mode
 - **Mean Remarks**: The plugin analyzes your scores and provides a "verdict" (e.g., "Hamster Wheel Drive Detected", "Potato CPU").
-- **CPU Hate**: Specifically detects and roasts "horrendous" server CPUs like older **Xeons**, **Atoms**, **Celerons**, and **AMD FX** chips.
+- **CPU Hate**: Specifically detects and roasts horrendous server CPUs like older **Xeons**, **Atoms**, **Celerons**, and **AMD FX** chips.
 
 ### 🛡️ Ban Evasion (Obfuscation)
 Hosting providers love to ban benchmark plugins by file hash.
