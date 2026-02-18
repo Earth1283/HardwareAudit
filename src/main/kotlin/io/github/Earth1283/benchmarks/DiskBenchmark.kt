@@ -98,7 +98,16 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             ))
 
             val reader = process.inputStream.bufferedReader()
+            val errorReader = process.errorStream.bufferedReader()
             var totalBytes = 0L
+            
+            // Read stderr in a separate thread to prevent blocking
+            val errorThread = Thread {
+                errorReader.forEachLine { line ->
+                    plugin.logger.warning("[DiskParty-Native-Err] $line")
+                }
+            }
+            errorThread.start()
             
             reader.forEachLine { line ->
                 if (line.startsWith("PARTY_RESULT:")) {
@@ -109,6 +118,7 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             }
 
             process.waitFor()
+            errorThread.join() // Wait for error logging to finish
             tempFolder.deleteRecursively()
 
             val effectiveDuration = if (duration > 0) duration.toDouble() else 15.0 // Estimation for ST

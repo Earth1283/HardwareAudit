@@ -40,7 +40,6 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: build/libs/HardwareAudit-*-*.jar
         make_latest: true
 
     - name: Update Nightly Release
