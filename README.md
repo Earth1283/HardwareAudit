@@ -54,11 +54,3 @@ To build locally:
 ./gradlew clean shadowJar obfuscateJars
 ```
 Artifacts will be in `build/libs/`.
-
-## Releasing
-To trigger a new release via GitHub Actions:
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-The CI will automatically build all obfuscated variants and attach them to the release.
