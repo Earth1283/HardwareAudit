@@ -25,6 +25,16 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21-R0.1-SNAPSHOT")
     implementation(kotlin("stdlib"))
     implementation("com.github.oshi:oshi-core:6.6.5")
+
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
+    testImplementation("io.mockk:mockk:1.13.12")
+    testImplementation("net.kyori:adventure-text-minimessage:4.17.0")
+    testImplementation("net.kyori:adventure-text-serializer-plain:4.17.0")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.shadowJar {

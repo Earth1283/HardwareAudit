@@ -1,9 +1,11 @@
 package io.github.Earth1283.utils
 
 import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 
 object Judgement {
     private val mm = MiniMessage.miniMessage()
+    private val plain = PlainTextComponentSerializer.plainText()
 
     fun getCpuRemark(opsPerSec: Double): String {
         if (opsPerSec > 250) return "<green>Absolute Beast. Single-core monster.</green>"
@@ -86,7 +88,9 @@ object Judgement {
         
         if (parallel) return "<red><b>ParallelGC Detected:</b> Ancient GC for Minecraft. Use G1GC (or ZGC/Shenandoah).</red>"
         if (!g1gc && !zgc && !shenandoah) return "<yellow><b>Generic GC:</b> Consider using Aikar's flags or G1GC for better TPS stability.</yellow>"
-        if (xmx != null && xms != null && xmx != xms) return "<red><b>Aikar is crying:</b> Xmx != Xms. This causes heap resize lag. Set them equal!</red>"
+        val xmxVal = xmx?.substring(4)
+        val xmsVal = xms?.substring(4)
+        if (xmxVal != null && xmsVal != null && xmxVal != xmsVal) return "<red><b>Aikar is crying:</b> Xmx != Xms. This causes heap resize lag. Set them equal!</red>"
         
         return "<green>JVM Flags look solid.</green>"
     }
@@ -98,6 +102,6 @@ object Judgement {
     }
 
     fun stripTags(message: String): String {
-        return mm.stripTags(message)
+        return plain.serialize(mm.deserialize(message))
     }
 }
