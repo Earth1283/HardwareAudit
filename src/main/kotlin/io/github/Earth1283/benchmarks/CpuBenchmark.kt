@@ -107,10 +107,10 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
         }
 
         // 2. FPU/AVX Stress (Compute Intensive)
-        // Math.fma (Fused Multiply Add) is often intrinsic and uses AVX units
         var acc = 0.0
         for (j in 0 until 1000) {
-            acc = Math.fma(j.toDouble(), tan(j.toDouble()), acc)
+            // Replaced Math.fma (Java 9+) with standard arithmetic for Java 8 compatibility
+            acc = (j.toDouble() * tan(j.toDouble())) + acc
         }
         // Consume result to avoid dead code elimination (though volatile or return might be better, this is usually enough in random loops)
         if (acc.isNaN()) {

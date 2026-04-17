@@ -22,15 +22,14 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21-R0.1-SNAPSHOT")
+    compileOnly("com.destroystokyo.paper:paper-api:1.13.2-R0.1-SNAPSHOT")
     implementation(kotlin("stdlib"))
     implementation("com.github.oshi:oshi-core:6.6.5")
+    implementation("net.kyori:adventure-platform-bukkit:4.3.4")
+    implementation("net.kyori:adventure-text-minimessage:4.17.0")
+    implementation("net.kyori:adventure-text-serializer-plain:4.17.0")
 
     testImplementation(kotlin("test"))
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
-    testImplementation("io.mockk:mockk:1.13.12")
-    testImplementation("net.kyori:adventure-text-minimessage:4.17.0")
-    testImplementation("net.kyori:adventure-text-serializer-plain:4.17.0")
 }
 
 tasks.test {
@@ -53,33 +52,33 @@ tasks.shadowJar {
     
     // Relocate dependencies to avoid conflicts with other plugins
     relocate("com.github.oshi", "io.github.earth1283.hardwareaudit.shadow.oshi")
+    relocate("net.kyori", "io.github.earth1283.hardwareaudit.shadow.kyori")
     // JNA relocation causes UnsatisfiedLinkError because native libs aren't moved/found correctly
     // relocate("com.sun.jna", "io.github.earth1283.hardwareaudit.shadow.jna")
 
     // Minimize the jar - this will remove unused classes from dependencies
-    minimize()
-}
-
-tasks {
-    runServer {
-        // Configure the Minecraft version for our task.
-        // This is the only required configuration besides applying the plugin.
-        // Your plugin's jar (or shadowJar if present) will be used automatically.
-        minecraftVersion("1.21")
+    minimize {
+        // We might need to keep some classes if they're used dynamically (e.g. by OSHI or Adventure)
+        exclude(dependency("com.github.oshi:oshi-core:.*"))
+        exclude(dependency("net.kyori:.*:.*"))
     }
 }
 
-val targetJavaVersion = 21
+tasks.assemble {
+    dependsOn(tasks.shadowJar)
+}
+
+tasks.runServer {
+    minecraftVersion("1.19.4")
+}
+
+val targetJavaVersion = 8
 kotlin {
     jvmToolchain(targetJavaVersion)
 }
 
-tasks.build {
-    dependsOn("shadowJar")
-}
-
 tasks.processResources {
-    val props = mapOf("version" to version)
+    val props = mapOf("version" to project.version)
     inputs.properties(props)
     filteringCharset = "UTF-8"
     filesMatching("plugin.yml") {
@@ -89,33 +88,33 @@ tasks.processResources {
 
 // Custom task to generate obfuscated variants
 tasks.register("obfuscateJars") {
-    dependsOn("shadowJar")
+    description = "Generates multiple variants of the shadowJar with random data injected into META-INF."
+    group = "build"
+    dependsOn(tasks.shadowJar)
+    
+    val shadowJarFile = tasks.shadowJar.get().archiveFile.get().asFile
+    val libsDir = shadowJarFile.parentFile
+
     doLast {
-        val buildDir = layout.buildDirectory.get().asFile
-        val libsDir = File(buildDir, "libs")
-        // Find the shadow jar (usually has -all or just version)
-        val shadowJarFile = libsDir.listFiles()?.find { 
-            it.name.endsWith(".jar") && !it.name.contains("-plain") && !it.name.contains("CLEAN") && !it.name.contains("OBFS")
-        } ?: throw GradleException("Could not find shadowJar in $libsDir")
+        if (!shadowJarFile.exists()) {
+            throw GradleException("Could not find shadowJar at ${shadowJarFile.absolutePath}")
+        }
 
         println("Base JAR: ${shadowJarFile.name}")
 
         // 1. Create CLEAN variant
-        val cleanJar = File(libsDir, shadowJarFile.name.replace(".jar", "-CLEAN.jar"))
+        val cleanJar = libsDir.resolve(shadowJarFile.name.replace(".jar", "-CLEAN.jar"))
         shadowJarFile.copyTo(cleanJar, overwrite = true)
         println("Created: ${cleanJar.name}")
 
         // 2. Create OBFS variants
         for (i in 1..3) {
-            val obfsJar = File(libsDir, shadowJarFile.name.replace(".jar", "-OBFS$i.jar"))
-            shadowJarFile.copyTo(obfsJar, overwrite = true)
+            val obfsJar = libsDir.resolve(shadowJarFile.name.replace(".jar", "-OBFS$i.jar"))
             
             // Inject random data safely into the ZIP structure
             try {
-                // Use ZipOutputStream to append an entry instead of complex FileSystem handling
-                // This is simpler and less prone to unresolved reference issues in Gradle Kotlin DSL
-                val tempJar = File(libsDir, "temp-${obfsJar.name}")
-                ZipInputStream(obfsJar.inputStream()).use { zis ->
+                val tempJar = libsDir.resolve("temp-${obfsJar.name}")
+                ZipInputStream(shadowJarFile.inputStream()).use { zis ->
                     ZipOutputStream(tempJar.outputStream()).use { zos ->
                         // Copy existing entries
                         var entry = zis.nextEntry
@@ -126,7 +125,7 @@ tasks.register("obfuscateJars") {
                             entry = zis.nextEntry
                         }
                         
-                        // Add random entry
+                        // Add random entry to make the JAR unique (hash-wise)
                         val randomBytes = ByteArray(1024 * (1..50).random()) // 1-50KB
                         Random().nextBytes(randomBytes)
                         val randomName = "META-INF/obfuscation-${UUID.randomUUID()}.bin"
@@ -137,9 +136,7 @@ tasks.register("obfuscateJars") {
                     }
                 }
                 
-                // Replace original with temp
-                obfsJar.delete()
-                // Use java.nio.file.Files.move for better reliability/exception reporting
+                if (obfsJar.exists()) obfsJar.delete()
                 Files.move(tempJar.toPath(), obfsJar.toPath())
                 
                 println("Created: ${obfsJar.name} (Injected random data)")

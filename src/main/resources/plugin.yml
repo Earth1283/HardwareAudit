@@ -1,5 +1,5 @@
 name: HardwareAudit
-version: '1.0'
+version: '${version}'
 main: io.github.Earth1283.HardwareAudit
 api-version: '1.13'
 load: STARTUP
