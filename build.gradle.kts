@@ -72,7 +72,7 @@ tasks.runServer {
     minecraftVersion("1.19.4")
 }
 
-val targetJavaVersion = 8
+val targetJavaVersion = 21
 kotlin {
     jvmToolchain(targetJavaVersion)
 }

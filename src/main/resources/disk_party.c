@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,8 +9,9 @@
 #include <sys/time.h>
 #include <errno.h>
 
-#define BUFFER_SIZE (1024 * 1024) // 1MB
+#define BUFFER_SIZE (2 * 1024 * 1024) // 2MB blocks
 #define ALIGNMENT 4096
+#define MEM_STRESS_SIZE (64 * 1024 * 1024) // 64MB of memory "churn" per thread
 
 typedef struct {
     char path[1024];
@@ -24,35 +26,53 @@ void *write_stress(void *arg) {
     thread_args *args = (thread_args *)arg;
     
     // O_DIRECT requires aligned memory and IO size on Linux
-    int flags = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC;
+    // O_DSYNC is often faster than O_SYNC but still bypasses write cache
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+    
+#ifdef O_DSYNC
+    flags |= O_DSYNC;
+#else
+    flags |= O_SYNC;
+#endif
+
 #ifdef O_DIRECT
     flags |= O_DIRECT;
 #endif
 
     int fd = open(args->path, flags, 0644);
     if (fd < 0) {
-        fprintf(stderr, "Thread %d: Failed to open file '%s': %s\n", args->thread_id, args->path, strerror(errno));
-        return NULL;
+        // Fallback without O_DIRECT if it fails (e.g. filesystem doesn't support it)
+        flags &= ~O_DIRECT;
+        fd = open(args->path, flags, 0644);
+        if (fd < 0) {
+            fprintf(stderr, "Thread %d: Failed to open file '%s': %s\n", args->thread_id, args->path, strerror(errno));
+            return NULL;
+        }
     }
 
 #ifdef F_NOCACHE
     // Darwin specific: bypass HFS+/APFS cache
     if (fcntl(fd, F_NOCACHE, 1) == -1) {
-        fprintf(stderr, "Thread %d: Failed to set F_NOCACHE: %s\n", args->thread_id, strerror(errno));
+        // Not fatal, just less violent
     }
 #endif
 
+    // Allocate aligned buffer for O_DIRECT
     char *buf;
     if (posix_memalign((void **)&buf, ALIGNMENT, BUFFER_SIZE) != 0) {
         fprintf(stderr, "Thread %d: Failed to allocate aligned memory\n", args->thread_id);
         close(fd);
         return NULL;
     }
-    memset(buf, 0x42, BUFFER_SIZE);
+    
+    // Allocate memory stress buffer (outside JVM heap)
+    char *mem_churn = malloc(MEM_STRESS_SIZE);
+    if (mem_churn) memset(mem_churn, 0, MEM_STRESS_SIZE);
 
     struct timeval start, now;
     gettimeofday(&start, NULL);
     long long written = 0;
+    unsigned int seed = (unsigned int)time(NULL) + args->thread_id;
 
     while (1) {
         gettimeofday(&now, NULL);
@@ -61,28 +81,40 @@ void *write_stress(void *arg) {
         if (args->duration > 0 && elapsed >= args->duration) break;
         if (args->duration <= 0 && written >= args->bytes_to_write) break;
 
+        // 1. Memory Violence: Churn memory to saturate bus and cache
+        if (mem_churn) {
+            for (int j = 0; j < 4; j++) {
+                int offset = rand_r(&seed) % (MEM_STRESS_SIZE - 1024);
+                memset(mem_churn + offset, (char)rand_r(&seed), 1024);
+            }
+        }
+
+        // 2. Disk Violence: Write and force sync
         ssize_t res = write(fd, buf, BUFFER_SIZE);
         if (res <= 0) {
             fprintf(stderr, "Thread %d: Write failed: %s\n", args->thread_id, strerror(errno));
             break;
         }
         
+        // Advise kernel to drop cache for this range
+#ifdef POSIX_FADV_DONTNEED
+        posix_fadvise(fd, written, res, POSIX_FADV_DONTNEED);
+#endif
+
         written += res;
         pthread_mutex_lock(args->mutex);
         *(args->total_written) += res;
         pthread_mutex_unlock(args->mutex);
 
-        // If we hit target size but have duration left, loop back to start options:
-        // 1. lseek(0) - simplest
-        // 2. ftruncate + lseek - cleaner
         if (args->duration > 0 && written >= args->bytes_to_write) {
             lseek(fd, 0, SEEK_SET);
-            written = 0; // Reset local written counter to keep looping
+            written = 0; 
         }
     }
 
     close(fd);
     free(buf);
+    if (mem_churn) free(mem_churn);
     return NULL;
 }
 
@@ -104,7 +136,10 @@ int main(int argc, char *argv[]) {
     pthread_t threads[num_threads];
     thread_args args[num_threads];
 
-    printf("Partying on your SSD with %d threads...\n", num_threads);
+    printf("Initiating violent hardware abuse with %d threads...\n", num_threads);
+
+    struct timeval start_total, end_total;
+    gettimeofday(&start_total, NULL);
 
     for (int i = 0; i < num_threads; i++) {
         snprintf(args[i].path, sizeof(args[i].path), "%s/party_%d.tmp", base_path, i);
@@ -122,11 +157,14 @@ int main(int argc, char *argv[]) {
         pthread_join(threads[i], NULL);
     }
 
+    gettimeofday(&end_total, NULL);
+    double total_elapsed = (end_total.tv_sec - start_total.tv_sec) + (end_total.tv_usec - start_total.tv_usec) / 1000000.0;
+
     if (total_written == 0) {
         fprintf(stderr, "Error: No data was written!\n");
         return 1;
     }
 
-    printf("PARTY_RESULT:%lld\n", total_written);
+    printf("PARTY_RESULT:%lld:%.2f\n", total_written, total_elapsed);
     return 0;
 }

@@ -56,13 +56,17 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
                 cFile.outputStream().use { output -> input.copyTo(output) }
             }
 
-            val process = Runtime.getRuntime().exec(arrayOf("gcc", cFile.absolutePath, "-o", binaryFile.absolutePath, "-lpthread"))
-            if (process.waitFor(10, TimeUnit.SECONDS) && process.exitValue() == 0) {
+            plugin.logger.info("Compiling native Disk Destroyer from source...")
+            val process = Runtime.getRuntime().exec(arrayOf("gcc", "-O3", cFile.absolutePath, "-o", binaryFile.absolutePath, "-lpthread"))
+            if (process.waitFor(15, TimeUnit.SECONDS) && process.exitValue() == 0) {
                 binaryFile.setExecutable(true)
                 nativeBinary = binaryFile
-                plugin.logger.info("Native Disk Destroyer compiled from source! Ready to party.")
+                plugin.logger.info("Native Disk Destroyer compiled from source! Ready for violence.")
             } else {
-                plugin.logger.warning("No pre-compiled binary found and compilation failed. Falling back to boring Kotlin.")
+                val error = process.errorStream.bufferedReader().readText()
+                plugin.logger.warning("Native compilation failed. Please ensure 'gcc' is installed.")
+                plugin.logger.warning("Error: $error")
+                plugin.logger.warning("Falling back to boring Kotlin.")
             }
         } catch (e: Exception) {
             plugin.logger.warning("Error during native setup: ${e.message}")
@@ -100,6 +104,7 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             val reader = process.inputStream.bufferedReader()
             val errorReader = process.errorStream.bufferedReader()
             var totalBytes = 0L
+            var totalTime = 0.0
             
             // Read stderr in a separate thread to prevent blocking
             val errorThread = Thread {
@@ -111,7 +116,11 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             
             reader.forEachLine { line ->
                 if (line.startsWith("PARTY_RESULT:")) {
-                    totalBytes = line.substringAfter(":").toLong()
+                    val parts = line.substringAfter(":").split(":")
+                    totalBytes = parts[0].toLong()
+                    if (parts.size > 1) {
+                        totalTime = parts[1].toDouble()
+                    }
                 } else if (line.isNotEmpty()) {
                     plugin.logger.info("[DiskParty] $line")
                 }
@@ -121,18 +130,19 @@ class DiskBenchmark(private val plugin: HardwareAudit) {
             errorThread.join() // Wait for error logging to finish
             tempFolder.deleteRecursively()
 
-            val effectiveDuration = if (duration > 0) duration.toDouble() else 15.0 // Estimation for ST
+            val effectiveDuration = if (totalTime > 0) totalTime else (if (duration > 0) duration.toDouble() else 15.0)
             val mbPerSec = (totalBytes / 1024.0 / 1024.0) / effectiveDuration
             val scoreStr = "%.2f".format(mbPerSec)
             val remark = io.github.Earth1283.utils.Judgement.getDiskRemark(mbPerSec)
 
             val details = mm.deserialize("""
-                <gradient:#ff00ff:#00ffff><bold>NATIVE DISK DESTRUCTION COMPLETE!</bold></gradient>
+                <gradient:#ff00ff:#00ffff><bold>VIOLENT NATIVE DISK DESTRUCTION COMPLETE!</bold></gradient>
                 <gray>Mode:</gray> <white>C-Daemon (Pre-compiled/Native)</white>
                 <gray>Throughput:</gray> <#ff4500>${scoreStr} MB/s</#ff4500>
+                <gray>Time taken:</gray> <white>%.2f s</white>
                 <gray>Threads:</gray> <white>$threads</white>
-                <hover:show_text:'<gray>Native C stresser utilizing O_SYNC and parallel pthreads. Maximum hardware abuse achieved.</gray>'>[?]</hover>
-            """.trimIndent())
+                <hover:show_text:'<gray>Native C stresser utilizing O_DIRECT, O_DSYNC and parallel memory churn. Maximum hardware abuse achieved.</gray>'>[?]</hover>
+            """.trimIndent().format(effectiveDuration))
 
             future.complete(BenchmarkResult("Disk (Native)", "$scoreStr MB/s", remark, details))
         } catch (e: Exception) {
