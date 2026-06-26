@@ -14,18 +14,30 @@ import kotlin.math.tan
 
 class CpuBenchmark(private val plugin: HardwareAudit) {
     private val mm = MiniMessage.miniMessage()
+    
+    @Volatile
+    private var globalAcc: Double = 0.0
 
     fun runCpuTest(durationSeconds: Int): CompletableFuture<BenchmarkResult> {
         val future = CompletableFuture<BenchmarkResult>()
         
         Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
-            val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
             var passes = 0L
             val size = 1_000_000 // Violent: Primes up to 1M
+            val flags = java.util.BitSet(size + 1)
+            
+            // Warmup phase (1 second) to allow JIT compilation
+            val warmupEnd = System.currentTimeMillis() + 1000
+            while (System.currentTimeMillis() < warmupEnd) {
+                runViolentOp(size, flags)
+            }
+            System.gc() // Try to start with a clean slate
+            
+            val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
             
             // Prime Sieve Loop + FPU Stress
             while (System.currentTimeMillis() < endTime) {
-                runViolentOp(size)
+                runViolentOp(size, flags)
                 passes++
             }
             
@@ -53,13 +65,30 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
             val executor = Executors.newFixedThreadPool(cores)
             val totalPasses = AtomicLong(0)
-            val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
             val size = 1_000_000 // Violent: Primes up to 1M
 
+            // Pre-allocate thread-local flags
+            val threadFlags = ThreadLocal.withInitial { java.util.BitSet(size + 1) }
+
+            // Warmup phase (1 second) to allow JIT compilation
+            val warmupEnd = System.currentTimeMillis() + 1000
+            val warmupTasks = (0 until cores).map {
+                executor.submit {
+                    while (System.currentTimeMillis() < warmupEnd) {
+                        runViolentOp(size, threadFlags.get())
+                    }
+                }
+            }
+            warmupTasks.forEach { it.get() }
+            System.gc()
+
+            val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
+            
             for (i in 0 until cores) {
                 executor.submit {
+                    val flags = threadFlags.get()
                     while (System.currentTimeMillis() < endTime) {
-                        runViolentOp(size)
+                        runViolentOp(size, flags)
                         totalPasses.incrementAndGet()
                     }
                 }
@@ -91,9 +120,8 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
         return future
     }
 
-    private fun runViolentOp(size: Int) {
+    private fun runViolentOp(size: Int, flags: java.util.BitSet) {
         // 1. Large Prime Sieve (Memory/Cache Intensive)
-        val flags = java.util.BitSet(size + 1)
         flags.set(0, size + 1) // Set all to true
         flags.set(0, false)
         flags.set(1, false)
@@ -109,13 +137,10 @@ class CpuBenchmark(private val plugin: HardwareAudit) {
         // 2. FPU/AVX Stress (Compute Intensive)
         var acc = 0.0
         for (j in 0 until 1000) {
-            // Replaced Math.fma (Java 9+) with standard arithmetic for Java 8 compatibility
             acc = (j.toDouble() * tan(j.toDouble())) + acc
         }
-        // Consume result to avoid dead code elimination (though volatile or return might be better, this is usually enough in random loops)
-        if (acc.isNaN()) {
-            // Unlikely, just to use the value
-            print("NaN")
-        }
+        
+        // Publish result to a volatile variable to defeat Dead Code Elimination
+        globalAcc = acc
     }
 }

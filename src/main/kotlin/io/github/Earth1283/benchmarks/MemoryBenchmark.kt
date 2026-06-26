@@ -116,10 +116,6 @@ class MemoryBenchmark(private val plugin: HardwareAudit) {
     }
 
     private fun runKotlin(durationSeconds: Int, threads: Int, future: CompletableFuture<BenchmarkResult>) {
-        val workerThreads = ArrayList<Thread>()
-        val throughputPasses = AtomicLong(0)
-        val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
-        
         // Dynamic Block Size Calculation
         val maxMemory = Runtime.getRuntime().maxMemory()
         val safeMemory = (maxMemory * 0.85).toLong() 
@@ -129,6 +125,31 @@ class MemoryBenchmark(private val plugin: HardwareAudit) {
         var blockSizeLong = min(targetBlockSize, safePerThread)
         if (blockSizeLong < 1024 * 1024) blockSizeLong = 1024 * 1024 
         val blockSize = blockSizeLong.toInt()
+
+        // --- Warmup Phase ---
+        val warmupThreads = ArrayList<Thread>()
+        val warmupEnd = System.currentTimeMillis() + 1500 // 1.5s warmup
+        for (i in 0 until threads) {
+            val t = Thread {
+                try {
+                    val src = ByteArray(blockSize)
+                    val dst = ByteArray(blockSize)
+                    java.util.Random().nextBytes(src)
+                    while (System.currentTimeMillis() < warmupEnd) {
+                        System.arraycopy(src, 0, dst, 0, blockSize)
+                    }
+                } catch (e: OutOfMemoryError) {}
+            }
+            warmupThreads.add(t)
+            t.start()
+        }
+        for (t in warmupThreads) t.join()
+        System.gc()
+        // --- End Warmup ---
+
+        val workerThreads = ArrayList<Thread>()
+        val throughputPasses = AtomicLong(0)
+        val endTime = System.currentTimeMillis() + (durationSeconds * 1000)
         
         for (i in 0 until threads) {
             val t = Thread {
@@ -142,6 +163,7 @@ class MemoryBenchmark(private val plugin: HardwareAudit) {
                         throughputPasses.addAndGet(1)
                     }
                 } catch (e: OutOfMemoryError) {
+                    plugin.logger.warning("OOM during Kotlin memory test!")
                 }
             }
             workerThreads.add(t)
@@ -150,11 +172,12 @@ class MemoryBenchmark(private val plugin: HardwareAudit) {
         
         for (t in workerThreads) t.join()
         
-        val latencyStart = System.nanoTime()
+        // --- Latency Benchmark (Sattolo's Cycle) ---
         val listSize = 16_000_000 
         val array = IntArray(listSize) { it }
-        array.shuffle() 
+        array.sattoloCycle() 
         
+        val latencyStart = System.nanoTime()
         var current = 0
         for (i in 0 until 10_000_000) {
             current = array[current]
@@ -178,11 +201,11 @@ class MemoryBenchmark(private val plugin: HardwareAudit) {
     }
 }
 
-// Extension to shuffle IntArray
-fun IntArray.shuffle() {
+// Extension to generate a single random cycle (Sattolo's algorithm)
+fun IntArray.sattoloCycle() {
     val rnd = java.util.Random()
     for (i in size - 1 downTo 1) {
-        val index = rnd.nextInt(i + 1)
+        val index = rnd.nextInt(i) // nextInt(i) instead of i+1 ensures Sattolo's cycle
         val a = this[index]
         this[index] = this[i]
         this[i] = a
