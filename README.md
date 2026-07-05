@@ -10,7 +10,7 @@ This plugin works on all SpigotMC forks.
 
 ### 🔥 Aggressive Benchmarking
 - **CPU Stress Test**: Uses a **Prime Sieve (Sieve of Eratosthenes)** to saturate the CPU's cache and branch prediction. No lightweight math here.
-- **Memory Saturation**: Launches **Multi-Threaded** copy operations to saturate available memory bandwidth across all cores. Upcomming C/JNI implementation soon.
+- **Memory Saturation**: Launches **Multi-Threaded** copy operations to saturate available memory bandwidth across all cores.
 - **Disk I/O**: Abuses C's O_DIRECT to write data directly to the disk to detect slow HDD "spinning rust" or cheap SATA SSDs.
 - **Steal Time**: Detects "noisy neighbors" on shared hosts by measuring CPU steal % and thread scheduling jitter.
 
